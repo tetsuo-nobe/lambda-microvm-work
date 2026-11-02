@@ -67,7 +67,7 @@ flowchart LR
 
 * サインインしたら、表示された AWS アカウントを展開し、ロール名のリンクをクリックして AWS マネジメントコンソールを開きます。
 
-* 画面右上のリージョンを、講師が指定したリージョン（例: バージニア北部 `us-east-1`）に切り替えます。
+* 画面右上のリージョンを、講師が指定したリージョン（例: 米国西部 (オレゴン) `us-west-2`）に切り替えます。
 
 ---
 
@@ -113,7 +113,7 @@ export PREFIX=user01
 
 # アカウント ID とリージョン（CloudShell のリージョンを使う）
 export ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
-export REGION=${AWS_REGION:-us-east-1}
+export REGION=${AWS_REGION:-us-west-2}
 
 # リソース名
 export BUCKET=${PREFIX}-microvm-${ACCOUNT}-${REGION}
