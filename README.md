@@ -12,7 +12,7 @@ AWS Lambda MicroVMs を初めて使う方向けのハンズオンです。AWS �
 
 ## 所要時間
 
-約 60 分
+約 40 分
 
 ## Lambda MicroVMs とは
 
