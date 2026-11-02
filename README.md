@@ -122,10 +122,13 @@ export BUILD_ROLE=${PREFIX}-MicroVMBuildRole
 export EXEC_ROLE=${PREFIX}-MicroVMExecutionRole
 export LOG_GROUP=/aws/lambda-microvms/${IMAGE}
 
+# 作成する MicroVM イメージの ARN（Step 5 以降で使う）
+export IMAGE_ARN=arn:aws:lambda:${REGION}:${ACCOUNT}:microvm-image:${IMAGE}
+
 # Lambda が管理するベースイメージ（Amazon Linux 2023）
 export BASE_IMAGE_ARN=arn:aws:lambda:${REGION}:aws:microvm-image:al2023-1
 
-env | grep -E '^(PREFIX|ACCOUNT|REGION|BUCKET|IMAGE|BUILD_ROLE|EXEC_ROLE|LOG_GROUP|BASE_IMAGE_ARN)='
+env | grep -E '^(PREFIX|ACCOUNT|REGION|BUCKET|IMAGE|IMAGE_ARN|BUILD_ROLE|EXEC_ROLE|LOG_GROUP|BASE_IMAGE_ARN)='
 ```
 
 > CloudShell のセッションが切れると、変数は消えてしまいます。セッションが切れたときは、この手順 1-3 をもう一度実行してください。
@@ -429,25 +432,36 @@ aws lambda-microvms create-microvm-image \
   --cpu-configurations '[{"architecture":"ARM_64"}]' \
   --resources '[{"minimumMemoryInMiB":2048}]' \
   --logging "{\"cloudWatch\":{\"logGroup\":\"${LOG_GROUP}\"}}" \
-  --hooks file://hooks.json
+  --hooks file://hooks.json \
+  | tee create-image-output.json
 
-export IMAGE_ARN=arn:aws:lambda:${REGION}:${ACCOUNT}:microvm-image:${IMAGE}
+# レスポンスの imageArn と、手順 1-3 で設定した IMAGE_ARN が一致することを確認する
+jq -r .imageArn create-image-output.json
+echo ${IMAGE_ARN}
 ```
+
+> `create-microvm-image` がエラーになった場合は、エラーの原因を解消してから再実行してください。イメージが作成されていないと、次の 5-3 は失敗します。
 
 ### 5-3. ビルドの完了を待つ
 
 ビルドには数分かかります。次のコマンドは、30 秒ごとに状態を表示します。
 
 ```bash
-while true; do
-  STATE=$(aws lambda-microvms get-microvm-image --image-identifier ${IMAGE_ARN} --query state --output text)
-  echo "$(date +%T) image state: ${STATE}"
-  case "${STATE}" in
-    CREATED|UPDATED) echo "ビルドが完了しました"; break ;;
-    *FAILED)         echo "ビルドに失敗しました。トラブルシューティングを参照してください"; break ;;
-  esac
-  sleep 30
-done
+# IMAGE_ARN が空の場合は、手順 1-3 の変数が消えている（CloudShell のセッション切れなど）
+if [ -z "${IMAGE_ARN}" ]; then
+  echo "IMAGE_ARN が設定されていません。手順 1-3 を再実行してください"
+else
+  while true; do
+    STATE=$(aws lambda-microvms get-microvm-image --image-identifier "${IMAGE_ARN}" --query state --output text)
+    echo "$(date +%T) image state: ${STATE}"
+    case "${STATE}" in
+      CREATED|UPDATED) echo "ビルドが完了しました"; break ;;
+      *FAILED)         echo "ビルドに失敗しました。トラブルシューティングを参照してください"; break ;;
+      "")              echo "状態を取得できませんでした。上のエラーメッセージを確認してください"; break ;;
+    esac
+    sleep 30
+  done
+fi
 ```
 
 イメージのバージョンと、アーキテクチャごとのビルドの状況を確認します。
@@ -726,7 +740,8 @@ cd ~ && rm -rf ~/microvm-handson
 | ZIP からビルドできない | Dockerfile が ZIP のルートにない。`unzip -l code-artifact.zip` で確認する |
 | `curl` で 401 や 403 が返る | トークンの期限切れ、または `allowedPorts` にないポートへのアクセス。手順 7-1 でトークンを発行し直す |
 | アプリのログが CloudWatch に出ない | `run-microvm` で実行用ロール（`--execution-role-arn`）を指定していない、またはロールの権限が足りない |
-| CloudShell で変数が空になっている | CloudShell のセッションが切れた。手順 1-3 を再実行する。`IMAGE_ARN` などは、該当する手順の `export` も再実行する |
+| `argument --image-identifier: expected one argument` と表示される | 変数 `IMAGE_ARN` が空になっている。手順 1-3 を再実行する |
+| CloudShell で変数が空になっている | CloudShell のセッションが切れた。手順 1-3 を再実行する。`MICROVM_ID`、`ENDPOINT`、`TOKEN` は、手順 6-2 と 7-1 の `export` も再実行する（`MICROVM_ID` と `ENDPOINT` は `run-output.json` から取り出せる） |
 
 ---
 
